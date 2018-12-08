@@ -3,25 +3,25 @@
 	"containerDefinitions": [
 		{
 			"name": "client",
-			"image": "mydockerid/multi-client",
+			"image": "chenggang/multi-client",
 			"hostname": "client",
 			"essential": false
 		},
 		{
 			"name": "server",
-			"image": "mydockerid/multi-server",
+			"image": "chenggang/multi-server",
 			"hostname": "api",
 			"essential": false
 		},
 		{
 			"name": "worker",
-			"image": "mydockerid/multi-worker",
+			"image": "chenggang/multi-worker",
 			"hostname": "worker",
 			"essential": false
 		},
 		{
 			"name": "nginx",
-			"image": "mydockerid/multi-nginx",
+			"image": "chenggang/multi-nginx",
 			"hostname": "nginx",
 			"essential": true,
 			"portMappings": [
