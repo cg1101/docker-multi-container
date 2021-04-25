@@ -19,7 +19,6 @@ const pool = new Pool({
 });
 pool.connect()
   .then((client) => {
-    console.log('connected->', client);
     client.query('CREATE TABLE IF NOT EXISTS values (number INT)')
       .catch(err => console.log(err));
   });
