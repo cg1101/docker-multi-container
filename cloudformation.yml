@@ -1,0 +1,192 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Resources for multi-container project deployment
+
+Parameters:
+  ApplicationName:
+    Type: String
+    Default: MultiDocker
+  DBInstanceClass:
+    Type: String
+    Default: db.t2.micro
+  DBDatabase:
+    Type: String
+    Default: postgres
+  DBUserName:
+    Type: String
+    Default: postgres
+    NoEcho: true
+  DBPassword:
+    Type: String
+    Default: postgres_password
+    NoEcho: true
+
+Resources:
+  # SecurityGroup
+  MultiDockerSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Security Group for multi-docker application
+
+  # SecurityGroup rule
+  AllowAccessWithinSG:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      # CidrIp: String
+      # CidrIpv6: String
+      # Description: String
+      FromPort: 5432
+      GroupId:
+        Fn::GetAtt: MultiDockerSecurityGroup.GroupId
+      # GroupName: String
+      IpProtocol: tcp
+      # SourcePrefixListId: String
+      SourceSecurityGroupId:
+        Fn::GetAtt: MultiDockerSecurityGroup.GroupId
+      # SourceSecurityGroupName: String
+      # SourceSecurityGroupOwnerId: String
+      ToPort: 6379
+
+  # Redis cluster
+  RedisDemo:
+    Type: AWS::ElastiCache::CacheCluster
+    Properties:
+      CacheNodeType: cache.t2.micro
+      ClusterName: multi-docker
+      Engine: redis
+      NumCacheNodes: 1
+      VpcSecurityGroupIds:
+        - Fn::GetAtt: MultiDockerSecurityGroup.GroupId
+
+  # DB instance
+  MyDB:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      AllocatedStorage: '20'
+      DBInstanceClass:
+        Ref: DBInstanceClass
+      DBName:
+        Ref: DBDatabase
+      Engine: postgres
+      MasterUsername:
+        Ref: DBUserName
+      MasterUserPassword:
+        Ref: DBPassword
+      VPCSecurityGroups:
+        - Fn::GetAtt: MultiDockerSecurityGroup.GroupId
+
+  # IAM Role that will be part of the InstanceProfile
+  MyInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Description: Beanstalk EC2 role
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkWebTier
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkMulticontainerDocker
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkWorkerTier
+
+  # InstanceProfile to be used by EC2 instances
+  MyInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - Ref: MyInstanceRole
+
+  # ElasticBeanstalk application
+  MultiDockerApp:
+    Description: multi-docker application deployed to ElasticBeanstalk
+    Type: AWS::ElasticBeanstalk::Application
+    Properties:
+      ApplicationName:
+        Ref: ApplicationName
+      Description: elastic beanstalk deployed multi-docker application
+
+  # ElasticBeanstalk environment
+  MultiDockerEnv:
+    Description: default environment for MultiDocker app
+    Type: AWS::ElasticBeanstalk::Environment
+    Properties:
+      ApplicationName:
+        Ref: MultiDockerApp
+      SolutionStackName: '64bit Amazon Linux 2018.03 v2.26.0 running Multi-container Docker 19.03.13-ce (Generic)'
+      OptionSettings:
+        - Namespace: aws:autoscaling:launchconfiguration
+          OptionName: IamInstanceProfile
+          Value:
+            Ref: MyInstanceProfile
+        - Namespace: aws:autoscaling:launchconfiguration
+          OptionName: InstanceType
+          Value: t2.micro
+        - Namespace: aws:autoscaling:launchconfiguration
+          OptionName: SecurityGroups
+          ResourceName: AWSEBAutoScalingLaunchConfiguration
+          Value:
+            # This value must be resource id, cannot use group id
+            # Fn::GetAtt: MultiDockerSecurityGroup.GroupId
+            Ref: MultiDockerSecurityGroup
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: REDIS_HOST
+          Value:
+            Fn::GetAtt: RedisDemo.RedisEndpoint.Address
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: REDIS_PORT
+          Value:
+            Fn::GetAtt: RedisDemo.RedisEndpoint.Port
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: PGDATABASE
+          Value:
+            Ref: DBDatabase
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: PGPASSWORD
+          Value:
+            Ref: DBPassword
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: PGUSER
+          Value:
+            Ref: DBUserName
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: PGHOST
+          Value:
+            Fn::GetAtt: MyDB.Endpoint.Address
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: PGPORT
+          Value:
+            Fn::GetAtt: MyDB.Endpoint.Port
+      Tags:
+        - Key: Name
+          Value:
+            Ref: ApplicationName
+
+Outputs:
+  MultiDockerSecurityGroupRef:
+    Value:
+      Ref: MultiDockerSecurityGroup
+  MultiDockerSecurityGroupGroupId:
+    Value:
+      Fn::GetAtt: MultiDockerSecurityGroup.GroupId
+  MultiDockerSecurityGroupVpcId:
+    Value:
+      Fn::GetAtt: MultiDockerSecurityGroup.VpcId
+  MultiDockerAppRef:
+    Value:
+      Ref: MultiDockerApp
+  NameOfRedisCluster:
+    Description: name of redis cluster
+    Value:
+      Ref: RedisDemo
+  Address:
+    Description: cache node DNS name
+    Value:
+      Fn::GetAtt: RedisDemo.RedisEndpoint.Address
+  Port:
+    Description: cache node listening port
+    Value:
+      Fn::GetAtt: RedisDemo.RedisEndpoint.Port
