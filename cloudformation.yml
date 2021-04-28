@@ -116,6 +116,11 @@ Resources:
     Properties:
       ApplicationName:
         Ref: MultiDockerApp
+      EnvironmentName:
+        Fn::Join:
+          - '-'
+          - - Ref: MultiDockerApp
+            - env
       SolutionStackName: '64bit Amazon Linux 2018.03 v2.26.0 running Multi-container Docker 19.03.13-ce (Generic)'
       OptionSettings:
         - Namespace: aws:autoscaling:launchconfiguration
